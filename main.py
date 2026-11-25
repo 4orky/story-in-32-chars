@@ -35,6 +35,9 @@
 #   (router over children) is the joke rather than the divorce. The
 #   revision keeps the winner's situation, character and event, and
 #   sharpens only its punchline.
+#   Second revision: output verification hardened with a SHA-256
+#   cross-check (hash of the selected message vs hash of the bytes
+#   read back from /output/entry.txt) in addition to the text compare.
 
 CANDIDATES = [
     # score: joke 9, story 10, fresh 9, tight 8 = 36
@@ -139,6 +142,7 @@ def main():
     assert message == message.strip() and "\n" not in message
     assert all(32 <= ord(ch) < 127 for ch in message)
     assert not any(c in message.lower() for c in BANNED_CLICHES)
+    import hashlib
     import os
     import sys
     os.makedirs("/output", exist_ok=True)
@@ -152,6 +156,14 @@ def main():
     if raw.decode("utf-8") != message:
         print("error: /output/entry.txt does not match the selected message",
               file=sys.stderr)
+        sys.exit(1)
+    # SHA-256 cross-check: the bytes read back must hash to exactly the
+    # hash of the selected message, so a silent byte-level corruption
+    # that survives a text compare cannot slip through.
+    if hashlib.sha256(raw).hexdigest() != \
+            hashlib.sha256(message.encode("utf-8")).hexdigest():
+        print("error: /output/entry.txt SHA-256 does not match the "
+              "selected message", file=sys.stderr)
         sys.exit(1)
     if not (1 <= len(message) <= 32) or "\n" in message or not message.strip():
         print("error: selected message fails the gate (1-32 chars, one line)",
