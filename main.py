@@ -1,176 +1,111 @@
-# Tell a Whole Story in 32 Characters — make.fun bounty
-# u-xvader-tell-a-whole-story-in-32-characters-f86dd978
-#
-# The program writes one Wi-Fi network name (1-32 characters) to
-# /output/entry.txt: the funniest name that hints at a whole story, as a
-# stranger would read it in a phone's network list.
-#
-# Candidates were drafted against the judge's brief, in order of weight:
-#   1. a Wi-Fi network name of at most 32 characters that reads as a joke
-#      and hints at a story (a plain label or a slogan loses)
-#   2. the joke lands on the first read, with a clear twist or punchline
-#      a stranger gets without explanation
-#   3. it tells a whole story: the name implies a situation, a character
-#      and something that happened, so a reader can fill in the rest
-#   4. it is fresh: it avoids the stock Wi-Fi jokes everyone has seen
-#      ("Pretty Fly for a Wi-Fi", "FBI Surveillance Van", "It Burns When
-#      IP", "Abraham Linksys", "The LAN Before Time", "No Free WiFi",
-#      "Tell My WiFi Love Her", "Drop It Like It's Hotspot") or turns a
-#      familiar one into something new
-#   5. it is tight: every character earns its place, and the wording is
-#      clean, readable and easy to say out loud
-# Each candidate carries a hand-scored craft score (0-10 per criterion,
-# summed below); selection is deterministic: highest score wins, ties go
-# to the shorter text. The output is byte-identical on every run.
-#
-# REVISION (second pass, on the winning line):
-#   First draft winner: "HeTookTheRouterInTheDivorce" (27 chars).
-#   Weakness found on re-read: it only *states* the event (a divorce
-#   happened, the router was taken). The punchline is the divorce itself,
-#   and the reader has to supply the joke.
-#   Revised line: "HeTookTheRouterNotTheKids" (25 chars).
-#   The ending now *shows the choice*: he walked out with the router and
-#   left the kids — the same divorce story, but the twist lands on the
-#   first read, it is two characters shorter, and the absurd priority
-#   (router over children) is the joke rather than the divorce. The
-#   revision keeps the winner's situation, character and event, and
-#   sharpens only its punchline.
-#   Second revision: output verification hardened with a SHA-256
-#   cross-check (hash of the selected message vs hash of the bytes
-#   read back from /output/entry.txt) in addition to the text compare.
+# One Wi-Fi network name, at most 32 characters, that makes a stranger
+# smile in a phone's network list and leaves them picturing the whole
+# breakup behind it. The script below drafts a dozen such names, grades
+# each one on four craft marks, and keeps the strongest; a short polish
+# note then sharpens the winning line's ending before the entry is saved.
+# The pick never changes between runs: equal grades fall to the shorter
+# name, and every gate below fails loudly instead of writing a bad entry.
+# The chosen line is written with no trailing newline to /output/entry.txt,
+# then read back and checksummed so a short write cannot slip through.
+# A second read of the draft winner follows below.
+# Polish note (second read of the draft winner): the first draft ended on
+# the divorce itself, which only reports what happened. Swapping the tail
+# for the choice he made instead — router kept, kids left behind — turns
+# the ending into the joke, and the line comes out two characters shorter.
 
-CANDIDATES = [
-    # score: joke 9, story 10, fresh 9, tight 8 = 36
-    # Divorce, one man, one router taken. The whole split is in the
-    # choice of what he carried out the door.
-    ("HeTookTheRouterInTheDivorce",
-     36),
-    # score: joke 8, story 10, fresh 8, tight 9 = 35
-    # Breakup inventory: the router and the dog both went with the ex.
-    ("MyExTookTheRouterAndTheDog",
-     35),
-    # score: joke 8, story 9, fresh 9, tight 9 = 35
-    # Cheating story retold as a signal-strength upgrade: left for the
-    # neighbour's 5G.
-    ("HeLeftMeForThe5GNextDoor",
-     35),
-    # score: joke 9, story 7, fresh 8, tight 9 = 33
-    # The classic breakup line, with the relationship replaced by the
-    # connection. Punchy, but the story behind it is thin.
-    ("ItsNotYouItsTheConnection",
-     33),
-    # score: joke 8, story 9, fresh 8, tight 8 = 33
-    # Still paying for the ex's Netflix: the breakup ended, the billing
-    # did not.
-    ("IStillPayForHisNetflixToo",
-     33),
-    # score: joke 8, story 8, fresh 8, tight 9 = 33
-    # A baby, a cable, a dead network: one small bite, one big outage.
-    ("TheBabyAteTheRouterCable",
-     33),
-    # score: joke 8, story 9, fresh 8, tight 7 = 32
-    # Exes under one roof: the Wi-Fi is shared, the feelings are not.
-    # Long for its punchline.
-    ("WeShareWiFiNotFeelingsAnymore",
-     32),
-    # score: joke 8, story 9, fresh 8, tight 7 = 32
-    # It worked until the in-laws arrived. Blame, precisely assigned.
-    ("ItWorkedBeforeTheInLawsCame",
-     32),
-    # score: joke 7, story 9, fresh 8, tight 8 = 32
-    # The password is still your birthday: tender, awkward, and a whole
-    # unfinished breakup in six words.
-    ("PasswordIsStillYourBirthday",
-     32),
-    # score: joke 7, story 8, fresh 7, tight 9 = 31
-    # Grandma unplugged it again: warm, but the joke is gentle and the
-    # "again" does most of the work.
-    ("GrandmaUnpluggedItAgain",
-     31),
-    # score: joke 7, story 7, fresh 7, tight 9 = 30
-    # The cat sits on the router again: relatable, but every cat owner
-    # has already told this story.
-    ("MyCatSitsOnTheRouterAgain",
-     30),
-    # score: joke 6, story 7, fresh 7, tight 8 = 28
-    # Dave knows the password: a household IT guy, but no event, no
-    # twist — a setup waiting for a punchline.
-    ("AskDaveHeKnowsThePassword",
-     28),
-]
+from pathlib import Path
+import sys
+import zlib
 
-# The winner's second-pass revision, applied deterministically: same
-# divorce story, sharper ending (see the REVISION note above).
+DESTINATION = Path("/output/entry.txt")
+CEILING = 32
 REVISED_WINNER = "HeTookTheRouterNotTheKids"
+DRAFTED = "HeTookTheRouterInTheDivorce"
 
-# Stock Wi-Fi jokes and worn lines the brief rules out; no candidate
-# may contain one.
-BANNED_CLICHES = ("pretty fly", "fbi", "it burns when ip",
-                   "abraham linksys", "martin router king", "wu-tang lan",
-                   "lan before time", "no free wifi", "tell my wifi",
-                   "drop it like it", "virus", "connect and die",
-                   "password is password", "as an ai")
+ENTRIES = [
+    {"line": "HeTookTheRouterInTheDivorce", "joke": 9, "story": 10, "fresh": 9, "tight": 8},
+    {"line": "MyExTookTheRouterAndTheDog", "joke": 8, "story": 10, "fresh": 8, "tight": 9},
+    {"line": "HeLeftMeForThe5GNextDoor", "joke": 8, "story": 9, "fresh": 9, "tight": 9},
+    {"line": "ItsNotYouItsTheConnection", "joke": 9, "story": 7, "fresh": 8, "tight": 9},
+    {"line": "IStillPayForHisNetflixToo", "joke": 8, "story": 9, "fresh": 8, "tight": 8},
+    {"line": "TheBabyAteTheRouterCable", "joke": 8, "story": 8, "fresh": 8, "tight": 9},
+    {"line": "WeShareWiFiNotFeelingsAnymore", "joke": 8, "story": 9, "fresh": 8, "tight": 7},
+    {"line": "ItWorkedBeforeTheInLawsCame", "joke": 8, "story": 9, "fresh": 8, "tight": 7},
+    {"line": "PasswordIsStillYourBirthday", "joke": 7, "story": 9, "fresh": 8, "tight": 8},
+    {"line": "GrandmaUnpluggedItAgain", "joke": 7, "story": 8, "fresh": 7, "tight": 9},
+    {"line": "MyCatSitsOnTheRouterAgain", "joke": 7, "story": 7, "fresh": 7, "tight": 9},
+    {"line": "AskDaveHeKnowsThePassword", "joke": 6, "story": 7, "fresh": 7, "tight": 8}]
 
-
-def pick(candidates):
-    best = None
-    for text, score in candidates:
-        assert 1 <= len(text) <= 32, f"candidate over gate: {len(text)} chars"
-        assert text.strip(), "candidate is blank"
-        assert text == text.strip(), "candidate has edge whitespace"
-        assert all(32 <= ord(ch) < 127 for ch in text), \
-            f"candidate is not printable ASCII: {text!r}"
-        lowered = text.lower()
-        assert not any(c in lowered for c in BANNED_CLICHES), \
-            f"candidate uses a worn joke: {text!r}"
-        key = (score, -len(text))  # highest score, then shortest
-        if best is None or key > best[0]:
-            best = (key, text)
-    return best[1]
-
-
-def main():
-    winner = pick(CANDIDATES)
-    # The revision only ever applies to the drafted winner; if a future
-    # edit changed the winner, fail loudly instead of silently revising
-    # a different line.
-    assert winner == "HeTookTheRouterInTheDivorce", \
-        f"unexpected winner, revision does not apply: {winner!r}"
-    message = REVISED_WINNER
-    assert 1 <= len(message) <= 32, \
-        f"revised entry over gate: {len(message)} chars"
-    assert message == message.strip() and "\n" not in message
-    assert all(32 <= ord(ch) < 127 for ch in message)
-    assert not any(c in message.lower() for c in BANNED_CLICHES)
-    import hashlib
-    import os
-    import sys
-    os.makedirs("/output", exist_ok=True)
-    with open("/output/entry.txt", "w", encoding="utf-8") as f:
-        f.write(message)
-    # Verify: read the output back byte-for-byte and re-check the gate,
-    # so a partial write or an encoding slip fails loudly instead of
-    # silently submitting a broken entry.
-    with open("/output/entry.txt", "rb") as f:
-        raw = f.read()
-    if raw.decode("utf-8") != message:
-        print("error: /output/entry.txt does not match the selected message",
-              file=sys.stderr)
-        sys.exit(1)
-    # SHA-256 cross-check: the bytes read back must hash to exactly the
-    # hash of the selected message, so a silent byte-level corruption
-    # that survives a text compare cannot slip through.
-    if hashlib.sha256(raw).hexdigest() != \
-            hashlib.sha256(message.encode("utf-8")).hexdigest():
-        print("error: /output/entry.txt SHA-256 does not match the "
-              "selected message", file=sys.stderr)
-        sys.exit(1)
-    if not (1 <= len(message) <= 32) or "\n" in message or not message.strip():
-        print("error: selected message fails the gate (1-32 chars, one line)",
-              file=sys.stderr)
-        sys.exit(1)
-    print(message)
+TIRED_TROPES = {
+    "pretty fly",
+    "fbi",
+    "it burns when ip",
+    "abraham linksys",
+    "martin router king",
+    "wu-tang lan",
+    "lan before time",
+    "no free wifi",
+    "tell my wifi",
+    "drop it like it",
+    "virus",
+    "connect and die",
+    "password is password",
+    "as an ai",
+}
 
 
-if __name__ == "__main__":
-    main()
+def _marks_total(entry):
+    return entry["joke"] + entry["story"] + entry["fresh"] + entry["tight"]
+
+
+def _is_clean(line):
+    if not line or line != line.strip():
+        return False
+    if not all(32 <= ord(ch) < 127 for ch in line):
+        return False
+    folded = line.lower()
+    return not any(trope in folded for trope in TIRED_TROPES)
+
+
+def _choose(entries):
+    ranked = None
+    for entry in entries:
+        line = entry["line"]
+        if len(line) < 1 or len(line) > CEILING:
+            raise SystemExit(f"entry breaks the length gate: {line!r}")
+        if not _is_clean(line):
+            raise SystemExit(f"entry fails the cleanliness gate: {line!r}")
+        grade = (_marks_total(entry), -len(line))
+        if ranked is None or grade > ranked[0]:
+            ranked = (grade, line)
+    return ranked[1]
+
+
+def _emit(final):
+    if len(final) < 1 or len(final) > CEILING:
+        raise SystemExit("final entry breaks the length gate")
+    if not _is_clean(final):
+        raise SystemExit("final entry fails the cleanliness gate")
+    DESTINATION.parent.mkdir(parents=True, exist_ok=True)
+    DESTINATION.write_text(final, encoding="utf-8")
+    back = DESTINATION.read_bytes()
+    if back.decode("utf-8") != final:
+        print("mismatch: entry file differs from the chosen line", file=sys.stderr)
+        raise SystemExit(1)
+    if zlib.crc32(back) != zlib.crc32(final.encode("utf-8")):
+        print("mismatch: entry file checksum differs from the chosen line", file=sys.stderr)
+        raise SystemExit(1)
+    sys.stdout.write(final + "\n")
+
+
+def run_entry():
+    picked = _choose(ENTRIES)
+    if picked != DRAFTED:
+        raise SystemExit(f"draft pick moved; polish note no longer fits: {picked!r}")
+    if not REVISED_WINNER.startswith(picked[:15]):
+        raise SystemExit("polished line drifted away from the drafted story")
+    _emit(REVISED_WINNER)
+
+
+if __name__ in {"__main__"}:
+    run_entry()
